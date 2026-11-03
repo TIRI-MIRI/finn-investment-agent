@@ -1,0 +1,110 @@
+{# FINN monitoring macros — shared helpers used across templates #}
+
+{# Format a numeric value or show "Not available" #}
+{% macro number(value, percent=false) %}
+  {%- if value is not none -%}
+    {{- '{:,.2f}'.format(value) -}}{%- if percent -%}%{%- endif -%}
+  {%- else -%}
+    <span class="missing-value">Not available</span>
+  {%- endif -%}
+{% endmacro %}
+
+{% macro feed_event(ann, monitor, compact=false) %}
+{% set key = event_id(ann) %}
+{% set info = monitor.event_info.get(key, {}) %}
+{% set alert_id = monitor.event_alerts.get(key) %}
+{% set alert = (monitor.queue | selectattr('id', 'equalto', alert_id) | first) if alert_id else none %}
+<article class="announcement-card{% if alert %} inbox-alert{% endif %}{% if alert and alert.acknowledged %} acknowledged{% endif %}" id="{{ alert_id or key }}">
+  <div class="card-top"><div class="card-tags"><span class="ticker-pill">{{ ann.ticker }}</span><span class="category-pill">{{ ann.category.value | replace('m_and_a','M&A') | replace('_',' ') | title }}</span></div><time class="card-date">{{ ann.published_at }}</time></div>
+  <p class="card-title">{{ ann.title.removeprefix('[DEMO] ') }}</p>
+  {% if not compact %}{{ event_detail(ann, info, false) }}{% endif %}
+  {% if alert %}<details class="review-details"><summary>Why it matters</summary><p class="monitor-note">{{ info.why }}</p>{% if info.fields %}<dl>{% for label,value in info.fields.items() %}<dt>{{ label }}</dt><dd>{{ value }}</dd>{% endfor %}</dl>{% endif %}</details>{% endif %}
+  <div class="card-footer">{{ filing(ann) }}{% if alert %}<button type="button" class="btn-done acknowledgement" data-alert-id="{{ alert.id }}" data-acknowledged="{{ 'true' if alert.acknowledged else 'false' }}" data-reference-date="{{ monitor.reference_date }}">{{ '✓ Done · Undo' if alert.acknowledged else 'Done ✓' }}</button>{% endif %}</div>
+</article>
+{% endmacro %}
+
+{# Filing provenance link (used internally by event_detail) #}
+{% macro filing(ann) %}
+  {%- if ann.source_document_id and not ann.is_fixture and ann.verification_note -%}
+    <a href="/filings/{{ ann.source_document_id }}" target="_blank" rel="noopener noreferrer" class="filing-link">Filing ↗</a>
+  {%- elif ann.has_verified_filing and ann.source_url -%}
+    <a href="{{ ann.source_url }}" target="_blank" rel="noopener noreferrer" class="filing-link">View verified filing ↗</a>
+  {%- elif ann.source_document_id and not ann.is_fixture and ann.verification_note -%}
+    <a href="/filings/{{ ann.source_document_id }}" target="_blank" rel="noopener noreferrer" class="filing-link">View local filing ↗</a>
+  {%- elif ann.is_fixture -%}
+    <span class="no-source">Synthetic demo announcement — no external filing.</span>
+  {%- else -%}
+    <span class="no-source">External filing unverified — link unavailable.</span>
+  {%- endif -%}
+{% endmacro %}
+
+{# Full event detail block (used in legacy contexts if needed) #}
+{% macro event_detail(ann, info, include_filing=true) %}
+<div class="event-detail" style="margin-top:10px;">
+  <p style="font-size:12px;color:var(--text-secondary);margin-bottom:6px;">
+    {{ info.summary }}
+  </p>
+  {% if info.fields and include_filing %}
+  <dl style="font-size:12px;display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin-bottom:8px;">
+    {% for label, value in info.fields.items() %}
+    <dt style="color:var(--text-muted);font-weight:600;">{{ label }}</dt>
+    <dd style="color:var(--text-secondary);">{{ value }}</dd>
+    {% endfor %}
+  </dl>
+  {% endif %}
+  {% if info.results %}{% set res = info.results %}
+  <div class="table-scroll" role="region" aria-label="Financial Results Comparison" tabindex="0">
+    <table class="results-table">
+      <caption>Extracted Results · {{ res.basis }} · {{ res.unit }}{% if res.is_fixture %} · synthetic{% endif %}</caption>
+      <thead>
+        <tr>
+          <th scope="col">Metric</th>
+          <th scope="col">{{ res.period.split(" (")[0] }}</th>
+          <th scope="col">{{ res.previous_period or 'Prior quarter' }}</th>
+          <th scope="col">{{ res.previous_year_period.split(' (')[0] if res.previous_year_period else 'Prior year' }}</th>
+          <th scope="col">QoQ</th>
+          <th scope="col">YoY</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for key, label in [('revenue','Revenue'),('ebitda','EBITDA'),('pbt','PBT'),('pat','PAT (Net Profit)')] %}
+        {% set metric = res[key] %}
+        <tr>
+          <th scope="row">{{ label }}{% if metric %}<small style="display:block;font-size:10px;font-weight:400;color:var(--text-muted);">{{ metric.unit }} · {{ metric.basis }}</small>{% endif %}</th>
+          <td>{{ number(metric.current if metric else none) }}</td>
+          <td>{{ number(metric.qoq_prev if metric else none) }}</td>
+          <td>{{ number(metric.yoy_prev if metric else none) }}</td>
+          <td>{{ number(metric.qoq_growth_pct if metric else none, true) }}</td>
+          <td>{{ number(metric.yoy_growth_pct if metric else none, true) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% elif ann.category.value == 'results' %}
+  <p style="font-size:12px;color:var(--text-muted);">Revenue, EBITDA, PBT and PAT comparisons: not available for this filing.</p>
+  {% endif %}
+  {% if include_filing %}{{ filing(ann) }}{% endif %}
+</div>
+{% endmacro %}
+
+{# Compact signal table row (kept for legacy signal-table references) #}
+{% macro signal_row(signal, monitor) %}
+<tr>
+  <th scope="row">{{ signal.ticker }}</th>
+  <td class="{% if signal.price_change_pct > 0 %}positive{% elif signal.price_change_pct < 0 %}negative{% endif %}">
+    {{ '%+.2f'|format(signal.price_change_pct) }}%
+  </td>
+  <td>{{ signal.volume_ratio }}×</td>
+  <td>{{ signal.baseline_sessions }} sessions</td>
+  <td>±{{ signal.price_threshold_pct }}% / {{ signal.volume_multiple_threshold }}× · {{ signal.trigger_mode }}</td>
+  <td>{{ signal.date }}</td>
+  <td>
+    {% if signal.ticker in monitor.signal_alerts %}
+      <a href="#{{ monitor.signal_alerts[signal.ticker] }}" class="filing-link">View alert ↑</a>
+    {% else %}
+      <span class="missing-value">Not triggered</span>
+    {% endif %}
+  </td>
+</tr>
+{% endmacro %}

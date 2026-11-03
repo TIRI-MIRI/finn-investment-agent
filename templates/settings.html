@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% block title %}FINN — Settings &amp; Environment{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-kicker">Configuration</div>
+  <h1 class="page-title">Settings &amp; Environment</h1>
+  <p class="page-subtitle">Monitoring thresholds, data source modes, and system configuration.</p>
+</div>
+
+{# ── Monitoring rules ──────────────────────────────────────── #}
+<section class="settings-section monitoring-settings" aria-labelledby="rules-title">
+  <div class="settings-section-title" id="rules-title">Monitoring Rules</div>
+  <p class="monitor-note" style="margin-bottom:14px;">
+    Saved on this device for the local demo. Evaluated on page load or refresh; no real-time push notifications.
+    Default digest window: 24 Hours.
+  </p>
+  {% if settings_warning %}
+  <p role="alert" class="monitor-error">{{ settings_warning }}</p>
+  {% endif %}
+  <form id="monitoring-settings-form">
+    <details class="watch-companies"><summary>Monitored companies · edit watchlist</summary>
+      <p class="monitor-note">Choose which companies can trigger alerts. All portfolio filings remain available in Today.</p>
+      <div class="subscription-grid">{% for company in companies %}<label><input type="checkbox" name="monitored_tickers" value="{{ company.ticker }}" {% if rules.monitored_tickers is none or company.ticker in rules.monitored_tickers %}checked{% endif %}>{{ company.ticker }}</label>{% endfor %}</div>
+    </details>
+    <div class="rules-grid">
+      <label>
+        Daily absolute price move (%)
+        <input name="price_threshold_pct" type="number" min="0.1" max="100" step="0.1" value="{{ rules.price_threshold_pct }}" required>
+        <small>Default ±3.0%; triggers at or above the threshold.</small>
+      </label>
+      <label>
+        Volume multiple
+        <input name="volume_multiple_threshold" type="number" min="0.5" max="50" step="0.1" value="{{ rules.volume_multiple_threshold }}" required>
+        <small>Default 2.0× the preceding 20-session mean.</small>
+      </label>
+      <label>
+        Combine market thresholds
+        <select name="trigger_mode">
+          <option value="OR"  {% if rules.trigger_mode == 'OR'  %}selected{% endif %}>OR — either threshold</option>
+          <option value="AND" {% if rules.trigger_mode == 'AND' %}selected{% endif %}>AND — both thresholds</option>
+        </select>
+        <small>OR is the default: either unusual price movement or volume merits a review.</small>
+      </label>
+    </div>
+
+    <fieldset class="event-subscriptions">
+      <legend>Event-type subscriptions</legend>
+      <p class="monitor-note" style="margin-bottom:8px;">Each selected category triggers an announcement alert. Unselected events remain in the filings feed.</p>
+      <div class="subscription-grid">
+        {% for category in event_categories %}
+        <label>
+          <input type="checkbox" name="event_types" value="{{ category.value }}"
+                 {% if category in rules.event_types %}checked{% endif %}>
+          {{ category.value
+             | replace('m_and_a','M&A')
+             | replace('bonus_split','Corporate actions (bonus / split)')
+             | replace('_',' ')
+             | capitalize }}
+        </label>
+        {% endfor %}
+      </div>
+    </fieldset>
+
+    <div class="rule-actions">
+      <button class="btn-primary window-btn active" type="submit">Save preferences</button>
+      <button class="btn-secondary window-btn" type="button" id="preview-rules">Preview alerts</button>
+      <button class="btn-secondary window-btn" type="button" id="default-rules">Load defaults</button>
+      <a href="/today" class="btn-secondary window-btn">Return to Today</a>
+    </div>
+    <p id="rules-status" role="status" aria-live="polite"></p>
+    <p class="monitor-note" style="margin-top:6px;">
+      Preview uses loaded filings and available market data without saving.
+      Loading defaults changes this form only; select Save preferences to apply.
+    </p>
+  </form>
+</section>
+
+{# ── Execution mode & security ─────────────────────────────── #}
+<details class="routine-details" style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;margin-bottom:16px;">
+  <summary style="padding:14px 16px;">Environment &amp; data status</summary>
+
+  <div class="settings-section" style="border:none;border-radius:0;margin-bottom:0;padding-top:0;">
+    <div class="settings-section-title">Execution Mode &amp; Security</div>
+
+    <div class="setting-row">
+      <div>
+        <div class="setting-name">Operating Mode</div>
+        <div class="setting-desc">{{ "Synthetic demo mode." if app_settings.demo_mode else "Verified historical filings; no live prices." }}</div>
+      </div>
+      <span class="setting-value" style="color:var(--amber);">{{ "DEMO" if app_settings.demo_mode else "REAL FILINGS" }}</span>
+    </div>
+
+    <div class="setting-row">
+      <div>
+        <div class="setting-name">Data Fixture Integrity</div>
+        <div class="setting-desc">{{ "All announcements and price histories are clearly tagged synthetic." if app_settings.demo_mode else "Only reviewed archived filings are shown in Today." }}</div>
+      </div>
+      <span class="setting-value" style="color:var(--green);">VERIFIED</span>
+    </div>
+
+    <div class="setting-row">
+      <div>
+        <div class="setting-name">API Credentials Committed</div>
+        <div class="setting-desc">Secrets kept in server .env; zero keys exposed in frontend code.</div>
+      </div>
+      <span class="setting-value" style="color:var(--green);">NONE (SAFE)</span>
+    </div>
+  </div>
+
+  <div class="settings-section" style="border:none;border-radius:0;margin-bottom:0;">
+    <div class="settings-section-title">Data Universe Metrics</div>
+
+    <div class="setting-row">
+      <div>
+        <div class="setting-name">Portfolio Companies</div>
+        <div class="setting-desc">Loaded from app.data.companies.PORTDATA.</div>
+      </div>
+      <span class="setting-value">{{ portfolio_count }} Stocks</span>
+    </div>
+
+    <div class="setting-row">
+      <div>
+        <div class="setting-name">Research Companies</div>
+        <div class="setting-desc">Loaded from app.data.companies.RESEARCH_DATA.</div>
+      </div>
+      <span class="setting-value">{{ research_count }} Stocks</span>
+    </div>
+
+    <div class="setting-row">
+      <div>
+        <div class="setting-name">Announcement Fixtures</div>
+        <div class="setting-desc">Loaded from app.data.announcements.ANNOUNCEMENTS.</div>
+      </div>
+      <span class="setting-value">{{ announcements_count }} Items</span>
+    </div>
+
+    <div class="setting-row">
+      <div>
+        <div class="setting-name">Synthetic Price Bars</div>
+        <div class="setting-desc">Loaded from app.data.prices.PRICE_BARS (25 trading days/ticker).</div>
+      </div>
+      <span class="setting-value">{{ price_bars_count }} Bars</span>
+    </div>
+  </div>
+</details>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/monitoring.js" defer></script>
+{% endblock %}

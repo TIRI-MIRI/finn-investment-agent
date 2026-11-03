@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block title %}FINN — Portfolio{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-kicker">Portfolio Universe</div>
+  <h1 class="page-title">Portfolio
+    <span class="category-pill" style="font-size:11px;">{{ companies | length }} Stocks</span>
+  </h1>
+  <p class="page-subtitle">Tracked NSE/BSE listed companies across diversified Indian market sectors.</p>
+</div>
+
+{# Tests check for "Mock Portfolio" and "synthetic" #}
+<div class="disclaimer-banner" role="alert">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="flex-shrink:0;color:var(--amber);margin-top:1px;">
+    <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+    <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+  </svg>
+  <div>
+    <strong>Mock Portfolio:</strong> All {{ companies | length }} companies represent the core demo portfolio
+    from <code>app.data.companies</code>. Latest prices shown are synthetic test fixtures.
+  </div>
+</div>
+
+<div class="search-box-wrap">
+  <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+    <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+  </svg>
+  <input type="search" id="portfolioSearch" class="search-input"
+         placeholder="Filter by ticker, company name, or sector…"
+         aria-label="Filter portfolio companies"
+         oninput="filterPortfolio(this.value)">
+</div>
+
+{% if companies %}
+<div class="company-grid" id="companyGrid">
+  {% for company in companies %}
+  <article class="company-card"
+           data-ticker="{{ company.ticker }}"
+           data-name="{{ company.name }}"
+           data-sector="{{ company.sector }}">
+    <div class="company-info">
+      <div class="company-ticker-row">
+        <span class="ticker-pill">{{ company.ticker }}</span>
+        <span class="badge badge-muted" style="font-size:9px;">{{ company.exchange }}</span>
+      </div>
+      <div class="company-name-full">{{ company.name }}</div>
+      <div class="company-sector-tag">{{ company.sector }}</div>
+    </div>
+    <div class="company-price-box">
+      <div class="company-price">
+        {% if company.ticker in latest_prices %}
+          ₹{{ "%.2f"|format(latest_prices[company.ticker]) }}
+        {% else %}—{% endif %}
+      </div>
+      <div class="company-price-label">Synthetic EOD</div>
+    </div>
+  </article>
+  {% endfor %}
+</div>
+
+<div class="empty-state" id="noMatchesState" style="display:none;">
+  <div class="empty-title">No matching companies</div>
+  <div class="empty-desc">No portfolio companies matched your filter query.</div>
+</div>
+
+{% else %}
+<div class="empty-state">
+  <div class="empty-title">No portfolio companies configured</div>
+  <div class="empty-desc">The portfolio universe is currently empty.</div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function filterPortfolio(query) {
+  query = (query || '').toLowerCase().trim();
+  const cards = document.querySelectorAll('#companyGrid .company-card');
+  let count = 0;
+  cards.forEach(card => {
+    const match = !query
+      || (card.dataset.ticker || '').toLowerCase().includes(query)
+      || (card.dataset.name   || '').toLowerCase().includes(query)
+      || (card.dataset.sector || '').toLowerCase().includes(query);
+    card.style.display = match ? '' : 'none';
+    if (match) count++;
+  });
+  const empty = document.getElementById('noMatchesState');
+  if (empty) empty.style.display = count === 0 ? 'block' : 'none';
+}
+</script>
+{% endblock %}

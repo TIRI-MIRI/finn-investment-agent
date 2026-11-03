@@ -1,0 +1,253 @@
+{% extends "base.html" %}
+{% from "monitoring_macros.html" import number with context %}
+{% block title %}FINN — Alerts{% endblock %}
+{% block content %}
+
+{% if not demo_mode %}
+<div class="real-data-banner" role="status">
+  <span class="real-data-dot">●</span>
+  <strong>Real-data mode</strong> — verified events only.
+  <a href="/watch" class="real-data-link">Settings ↗</a>
+</div>
+{% endif %}
+
+{# ── Page header ───────────────────────────────────────────── #}
+<div class="page-header">
+  <div class="page-header-row">
+    <div>
+      <h1 class="page-title">{{ monitor.unread_count }} alert{{ 's' if monitor.unread_count != 1 else '' }}</h1>
+      <p class="page-subtitle">Triggered price, volume, and filing alerts across your portfolio.</p>
+    </div>
+    <a href="/watch" class="header-action-link">Change ↗</a>
+  </div>
+</div>
+
+{# ── Thresholds summary ────────────────────────────────────── #}
+<p class="alerts-config">
+  Price ±{{ monitor.rules.price_threshold_pct }}% &middot;
+  Volume {{ monitor.rules.volume_multiple_threshold }}× &middot;
+  {{ monitor.rules.event_types | length }} filing types
+  <a href="/watch" class="config-change-link">Change</a>
+</p>
+
+{# ── Date / window filters ─────────────────────────────────── #}
+<nav class="window-filters" aria-label="Alert time window">
+  {% for key, label in [('24h','24h'),('3d','3d'),('7d','7d'),('30d','30d'),('all','All')] %}
+  <a href="/alerts?window={{ key }}"
+     class="wf-btn {% if active_window == key %}active{% endif %}"
+     {% if active_window == key %}aria-current="page"{% endif %}>{{ label }}</a>
+  {% endfor %}
+</nav>
+
+{# Status line #}
+<p id="monitor-status" role="status" aria-live="polite" style="font-size:12px;color:var(--text-muted);min-height:18px;margin-bottom:10px;"></p>
+
+{% if monitor.warning %}
+<p role="alert" class="monitor-error">{{ monitor.warning }}</p>
+{% endif %}
+
+{# ══════════════════════════════════════════════════════════════
+   UNUSUAL MOVES — market signal alerts
+   ═══════════════════════════════════════════════════════════ #}
+{% set signal_alerts = monitor.queue | selectattr('signal') | list %}
+{% if signal_alerts %}
+<div class="section-head">
+  <span class="section-title">Unusual Moves</span>
+  <span class="section-badge">{{ signal_alerts | length }}</span>
+</div>
+<div class="card-stack" style="margin-bottom:24px;">
+{% for alert in signal_alerts %}
+<article class="signal-card {% if alert.acknowledged %}acknowledged{% endif %}"
+         id="{{ alert.id }}">
+  <div class="card-top">
+    <div class="card-left">
+      <span class="ticker-pill">{{ alert.ticker }}</span>
+      <span class="company-name-small">{{ alert.company }}</span>
+    </div>
+    <div class="card-right">
+      <span class="severity-badge {{ alert.severity }}">{{ alert.severity }}</span>
+      <span class="ack-status {% if alert.acknowledged %}reviewed{% endif %}">
+        {{ 'Reviewed' if alert.acknowledged else 'Needs review' }}
+      </span>
+    </div>
+  </div>
+
+  {% if alert.signal %}
+  <div class="signal-values">
+    <div class="signal-val">
+      <span class="signal-val-label">Price move</span>
+      <span class="signal-val-num {% if alert.signal.price_change_pct > 0 %}positive{% elif alert.signal.price_change_pct < 0 %}negative{% endif %}">
+        {{ '%+.2f'|format(alert.signal.price_change_pct) }}%
+      </span>
+    </div>
+    <div class="signal-val">
+      <span class="signal-val-label">Volume</span>
+      <span class="signal-val-num">{{ '%.2f'|format(alert.signal.volume_ratio) }}×</span>
+    </div>
+    <div class="signal-val">
+      <span class="signal-val-label">Threshold</span>
+      <span class="signal-val-num" style="font-size:13px;color:var(--text-secondary);">
+        ±{{ alert.signal.price_threshold_pct }}% / {{ alert.signal.volume_multiple_threshold }}×
+      </span>
+    </div>
+    <div class="signal-val">
+      <span class="signal-val-label">Date</span>
+      <span class="signal-val-num" style="font-size:13px;color:var(--text-secondary);">{{ alert.date }}</span>
+    </div>
+  </div>
+  {% endif %}
+
+  <details class="review-details"><summary>Trigger details</summary><p class="card-trigger" style="margin-top:4px;">
+    <strong>Trigger:</strong> {{ alert.reason }}
+  </p>
+  <p class="card-why">
+    {{ alert.why }}
+  </p>
+
+  </details>
+  {# Explicit "no filing" note if no event is linked #}
+  {% if not alert.ann %}
+  <p class="no-source" style="margin-top:4px;">No matching filing found for this price/volume move.</p>
+  {% endif %}
+
+  <div class="card-footer" style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border-light);">
+    <div>
+      {% if alert.ann and alert.ann.has_verified_filing and alert.ann.source_url %}
+        <a class="filing-link" href="{{ alert.ann.source_url }}" target="_blank" rel="noopener noreferrer">Filing ↗</a>
+      {% elif alert.ann and alert.ann.source_document_id and not alert.ann.is_fixture and alert.ann.verification_note %}
+        <a class="filing-link" href="/filings/{{ alert.ann.source_document_id }}" target="_blank" rel="noopener noreferrer">Filing (local) ↗</a>
+      {% endif %}
+    </div>
+    <button class="btn-done acknowledgement {% if alert.acknowledged %}done{% endif %}"
+            data-alert-id="{{ alert.id }}"
+            data-acknowledged="{{ 'true' if alert.acknowledged else 'false' }}"
+            data-reference-date="{{ monitor.reference_date }}"
+            type="button">
+      {% if alert.acknowledged %}✓ Done{% else %}Done ✓{% endif %}
+    </button>
+  </div>
+</article>
+{% endfor %}
+</div>
+{% endif %}
+
+{# ══════════════════════════════════════════════════════════════
+   FILINGS YOU FOLLOW — event alerts grouped by category
+   ═══════════════════════════════════════════════════════════ #}
+{% set event_alerts_list = monitor.queue | rejectattr('signal') | list %}
+{% if event_alerts_list %}
+
+{# Group by broad category label for visual separation #}
+{% set results_alerts = event_alerts_list | selectattr('event_type', 'equalto', 'results') | list %}
+{% set ma_alerts      = event_alerts_list | selectattr('event_type', 'equalto', 'M&A') | list %}
+{% set mgmt_alerts    = event_alerts_list | selectattr('event_type', 'equalto', 'management change') | list %}
+{% set other_alerts   = event_alerts_list | reject('in', results_alerts + ma_alerts + mgmt_alerts) | list %}
+
+<div class="section-head">
+  <span class="section-title">Filings You Follow</span>
+  <span class="section-badge">{{ event_alerts_list | length }}</span>
+</div>
+
+<div class="card-stack" style="margin-bottom:24px;">
+{% for alert in event_alerts_list %}
+{% set info = monitor.event_info.get(alert.event_id, {}) if alert.event_id else {} %}
+<article class="alert-card {{ alert.severity }} {% if alert.acknowledged %}acknowledged{% endif %}"
+         id="{{ alert.id }}">
+  <div class="card-top">
+    <div class="card-left">
+      <span class="ticker-pill">{{ alert.ticker }}</span>
+      <span class="company-name-small">{{ alert.company }}</span>
+    </div>
+    <div class="card-right">
+      <span class="severity-badge {{ alert.severity }}">{{ alert.severity }}</span>
+      <span class="ack-status {% if alert.acknowledged %}reviewed{% endif %}">
+        {{ 'Reviewed' if alert.acknowledged else 'Needs review' }}
+      </span>
+    </div>
+  </div>
+
+  <div class="card-meta">
+    <span class="event-type-tag">{{ alert.event_type }}</span>
+    <span>·</span>
+    <time>Filed {{ alert.date }}</time>
+  </div>
+
+  <p class="card-title">{{ alert.title.removeprefix('[DEMO] ') }}</p>
+
+  <details class="review-details"><summary>Why it matters</summary><p class="card-trigger"><strong>Triggered:</strong> {{ alert.reason }}</p>
+  <p class="card-why"><strong>Why it matters:</strong> {{ alert.why }}</p>
+
+  <div class="card-implication">
+    <strong>Interpretation:</strong> {{ alert.implication }}
+  </div>
+
+  </details>
+  {# Results table if available #}
+  {% if info and info.results %}
+  {% set res = info.results %}
+  <div class="table-scroll" style="margin-bottom:10px;" role="region" aria-label="Quarterly results">
+    <table class="results-table">
+      <caption>{{ res.period }} · {{ res.basis }} · {{ res.unit }}{% if res.is_fixture %} · synthetic{% endif %}</caption>
+      <thead>
+        <tr>
+          <th>Metric</th>
+          <th>{{ res.period }}</th>
+          <th>{{ res.previous_year_period or 'Prior year' }}</th>
+          <th>YoY</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for key, label in [('revenue','Revenue'),('ebitda','EBITDA'),('pbt','PBT'),('pat','PAT')] %}
+        {% set metric = res[key] %}
+        <tr>
+          <th>{{ label }}</th>
+          {% if metric %}
+          <td>{{ number(metric.current) }}</td>
+          <td>{{ number(metric.yoy_prev) }}</td>
+          <td class="{% if metric.yoy_growth_pct is not none %}{% if metric.yoy_growth_pct > 0 %}positive{% elif metric.yoy_growth_pct < 0 %}negative{% endif %}{% endif %}">
+            {{ number(metric.yoy_growth_pct, true) }}
+          </td>
+          {% else %}
+          <td colspan="3" class="na-value">Not stated in source</td>
+          {% endif %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <div class="card-footer">
+    <div>
+      {% if alert.ann and alert.ann.has_verified_filing and alert.ann.source_url %}
+        <a class="filing-link" href="{{ alert.ann.source_url }}" target="_blank" rel="noopener noreferrer">Filing ↗</a>
+      {% elif alert.ann and alert.ann.source_document_id and not alert.ann.is_fixture and alert.ann.verification_note %}
+        <a class="filing-link" href="/filings/{{ alert.ann.source_document_id }}" target="_blank" rel="noopener noreferrer">Filing (local) ↗</a>
+      {% else %}
+        <span class="no-filing-note">No verified filing link.</span>
+      {% endif %}
+    </div>
+    <button class="btn-done acknowledgement {% if alert.acknowledged %}done{% endif %}"
+            data-alert-id="{{ alert.id }}"
+            data-acknowledged="{{ 'true' if alert.acknowledged else 'false' }}"
+            data-reference-date="{{ monitor.reference_date }}"
+            type="button">
+      {% if alert.acknowledged %}✓ Done{% else %}Done ✓{% endif %}
+    </button>
+  </div>
+</article>
+{% endfor %}
+</div>
+{% endif %}
+
+{% if not monitor.queue %}
+<div class="empty-state">
+  <div class="empty-title">No alerts in this window</div>
+  <div class="empty-desc">No triggered alerts match the current time filter and monitoring rules.</div>
+</div>
+{% endif %}
+
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/monitoring.js" defer></script>
+{% endblock %}

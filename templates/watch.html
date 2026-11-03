@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}FINN — Watch{% endblock %}
+{% block content %}
+<form id="monitoring-settings-form" class="watch-workspace">
+  <header class="watch-heading">
+    <div><p class="watch-eyebrow">YOUR INVESTMENT RADAR</p><h1>Watch<span class="title-dot">.</span></h1><p>Choose your companies. Define what deserves attention.</p></div>
+    <div class="watch-actions"><button type="button" id="cancel-rules" class="watch-secondary" disabled>Cancel</button><button type="submit" class="watch-primary">Save changes <span aria-hidden="true">↗</span></button></div>
+  </header>
+  <div class="watch-feedback"><span id="watch-save-state">All changes saved</span><p id="rules-status" role="status" aria-live="polite"></p></div>
+  {% if settings_warning %}<p role="alert" class="watch-error">{{ settings_warning }}</p>{% endif %}
+  <div class="watch-metrics" aria-label="Monitoring overview">
+    <div><span class="metric-index">01 / COVERAGE</span><p><strong id="watch-active-count">{{ rules.monitored_tickers|length if rules.monitored_tickers is not none else companies|length }}</strong><span>of {{ companies|length }} companies active</span></p></div>
+    <div><span class="metric-index">02 / SENSITIVITY</span><p><strong id="watch-price-value">±{{ rules.price_threshold_pct }}%</strong><span>price · <b id="watch-volume-value">{{ rules.volume_multiple_threshold }}×</b> volume</span></p></div>
+    <div><span class="metric-index">03 / DISCLOSURES</span><p><strong id="watch-category-count">{{ rules.event_types|length }}</strong><span>filing categories followed</span></p></div>
+  </div>
+  <div class="watch-columns">
+    <section class="watch-universe" aria-labelledby="watch-companies-title">
+      <div class="watch-section-heading"><div><p class="watch-eyebrow">COVERAGE</p><h2 id="watch-companies-title">Your companies</h2></div><span class="watch-count">{{ companies|length }} in universe</span></div>
+      <p class="watch-help">Switch a company on to add it to your active watchlist. Switch it off to stop its alerts.</p>
+      <div class="watch-search"><span aria-hidden="true">⌕</span><input type="search" id="portfolioSearch" placeholder="Search company, ticker or sector" aria-label="Search companies"></div>
+      <div class="watch-list-tools"><div class="watch-segments" role="group" aria-label="Filter companies"><button type="button" data-company-filter="all" aria-pressed="true">All</button><button type="button" data-company-filter="active" aria-pressed="false">Active</button><button type="button" data-company-filter="off" aria-pressed="false">Off watchlist</button></div><span id="watch-result-count" aria-live="polite">{{ companies|length }} companies</span></div>
+      <div class="watch-company-list" id="companyGrid">
+      {% for company in companies %}
+      {% set active = rules.monitored_tickers is none or company.ticker in rules.monitored_tickers %}
+      <article class="watch-company" data-ticker="{{ company.ticker }}" data-name="{{ company.name }}" data-sector="{{ company.sector }}">
+        <span class="watch-monogram" aria-hidden="true">{{ company.ticker[:2] }}</span>
+        <div class="watch-company-info"><h3>{{ company.ticker }} <span>{{ company.exchange }}</span></h3><p>{{ company.name }}</p><small>{{ company.sector }}</small>{% for doc in documents_by_ticker.get(company.ticker, []) %}<a class="watch-document" href="/filings/{{ doc.id }}" target="_blank" rel="noopener noreferrer">Verified filing · {{ doc.published_date }} ↗</a>{% endfor %}</div>
+        <div class="watch-quote">{% if company.ticker in latest_prices %}<strong>₹{{ '%.2f'|format(latest_prices[company.ticker]) }}</strong><small>Synthetic EOD</small>{% else %}<span>—</span><small>Price unavailable</small>{% endif %}</div>
+        <label class="watch-switch"><input type="checkbox" role="switch" name="monitored_tickers" value="{{ company.ticker }}" aria-label="Monitor {{ company.ticker }}" {% if active %}checked{% endif %}><span class="switch-track" aria-hidden="true"></span><span class="switch-label">{{ 'Active' if active else 'Off' }}</span></label>
+      </article>
+      {% endfor %}</div>
+      <div id="noMatchesState" class="watch-empty" hidden><h3>No companies found</h3><p>Try another search or choose a different filter.</p><button type="button" id="clear-company-search" class="watch-secondary">Show all companies</button></div>
+      <p class="watch-footnote">Your portfolio universe stays intact. Filings from companies you switch off remain available in Today.</p>
+    </section>
+    <aside class="watch-controls" aria-label="Monitoring preferences">
+      <section class="watch-rule-panel" aria-labelledby="watch-rules-title"><div class="watch-section-heading"><div><p class="watch-eyebrow">SIGNALS</p><h2 id="watch-rules-title">Alert rules</h2></div><span class="watch-rule-icon" aria-hidden="true">≋</span></div>
+        <div class="watch-thresholds"><label for="watch-price">Daily price move<span class="watch-input-unit"><input id="watch-price" name="price_threshold_pct" type="number" min="0.1" max="100" step="0.1" value="{{ rules.price_threshold_pct }}" required><span>± %</span></span></label><label for="watch-volume">Volume multiple<span class="watch-input-unit"><input id="watch-volume" name="volume_multiple_threshold" type="number" min="0.5" max="50" step="0.1" value="{{ rules.volume_multiple_threshold }}" required><span>×</span></span></label></div>
+        <label class="watch-combine" for="watch-mode">Trigger an alert when<select id="watch-mode" name="trigger_mode"><option value="OR" {% if rules.trigger_mode == 'OR' %}selected{% endif %}>Either threshold is crossed</option><option value="AND" {% if rules.trigger_mode == 'AND' %}selected{% endif %}>Both thresholds are crossed</option></select></label>
+        <p class="watch-help">Inclusive thresholds. Volume uses up to 20 preceding sessions; this baseline is fixed.</p>
+        <div class="watch-rule-actions"><button type="button" id="preview-rules" class="watch-secondary">Preview alerts</button><button type="button" id="default-rules" class="watch-text-button">Load defaults</button></div>
+      </section>
+      <section class="watch-subscriptions" aria-labelledby="watch-filings-title"><div class="watch-section-heading"><div><p class="watch-eyebrow">DISCLOSURES</p><h2 id="watch-filings-title">Filings you follow</h2></div></div><p class="watch-help">Choose the announcements that can trigger an alert.</p><fieldset class="watch-categories"><legend class="visually-hidden">Filing subscriptions</legend>{% for category in event_categories %}<label><input type="checkbox" name="event_types" value="{{ category.value }}" {% if category in rules.event_types %}checked{% endif %}><span>{{ {'m_and_a':'M&A', 'agm_egm':'AGM / EGM', 'bonus_split':'Bonus / split'}.get(category.value, category.value|replace('_',' ')|capitalize) }}</span></label>{% endfor %}</fieldset></section>
+      <section class="watch-status" aria-labelledby="watch-status-title"><h2 id="watch-status-title">Monitoring status</h2><dl><div><dt>Data source</dt><dd>{{ 'Synthetic demo' if app_settings.demo_mode else 'Verified filings' }}</dd></div><div><dt>Latest available data</dt><dd><time>{{ last_data_update }}</time></dd></div><div><dt>Verified local documents</dt><dd>{{ verified_filings_count }}</dd></div><div><dt>Evaluation</dt><dd>On load or refresh</dd></div></dl><p>No live feed or background push. {% if not app_settings.demo_mode %}Market prices are not connected.{% else %}Prices and announcements are synthetic fixtures.{% endif %}</p>{% for doc in verified_documents %}<a class="watch-document" href="/filings/{{ doc.id }}" target="_blank" rel="noopener noreferrer">{{ doc.ticker }} · {{ doc.published_date }} · Open filing ↗</a>{% endfor %}<a class="watch-alert-link" href="/alerts">Review your alerts <span aria-hidden="true">→</span></a></section>
+    </aside>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}<script src="/static/js/monitoring.js" defer></script><script src="/static/js/watch.js" defer></script>{% endblock %}

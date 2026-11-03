@@ -1,0 +1,361 @@
+{% extends "base.html" %}
+{% block title %}FINN — Research{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div class="page-kicker">Pull Workflow · Primary Sources Only</div>
+  <h1 class="page-title">Company Research</h1>
+  <p class="page-subtitle">Explore the business, results and outlook — with sources alongside each claim.</p>
+</div>
+
+{# ── Ticker search ─────────────────────────────────────────── #}
+<div class="search-box-wrap">
+  <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true">
+    <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+  </svg>
+  <input type="search" id="ticker-search-input" class="search-input"
+         placeholder="Search ticker (e.g. INFY, RELIANCE, TCS)…"
+         aria-label="Search ticker for research"
+         value="{{ selected_ticker }}">
+</div>
+
+{# ── Quick pills ───────────────────────────────────────────── #}
+<div class="quick-pills" id="research-pills">
+  {% for company in research_companies %}
+  <a href="/research?ticker={{ company.ticker }}"
+     class="quick-pill {% if company.ticker == selected_ticker %}active{% endif %}"
+     title="{{ company.name }}">
+    {{ company.ticker }}
+  </a>
+  {% endfor %}
+</div>
+
+{# Loading spinner - text must match test: "Grounding Research Brief" #}
+<div id="research-loading" class="loading-indicator">
+  <div class="spinner"></div>
+  <div style="font-size:13px;font-weight:600;color:var(--text-primary);">Grounding Research Brief...</div>
+  <div style="font-size:12px;color:var(--text-muted);">Retrieving primary source documents and validating citations.</div>
+</div>
+
+{% if not selected_company %}
+<div class="empty-state error-state-card" style="margin-top:24px;">
+  <div class="empty-title">Ticker Not In Authorized Research Universe</div>
+  <div class="empty-desc">
+    "{{ selected_ticker }}" is not in the authorised 5-company research universe.
+    Select INFY, RELIANCE, TCS, HDFCBANK, or TATAMOTORS.
+  </div>
+</div>
+
+{% elif brief %}
+
+{# ── Coverage warning ─────────────────────────────────────── #}
+{% if brief.coverage.documents_found < 3 or (brief.coverage.warnings and brief.coverage.warnings | length > 1) %}
+<div class="partial-coverage-banner">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+    <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+  </svg>
+  <span><strong>Partial coverage:</strong> Some sections rely on partial primary filings. Check evidence below.</span>
+</div>
+{% endif %}
+
+{# ── Research header card ─────────────────────────────────── #}
+<div class="research-meta-card">
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+    <div>
+      <div class="research-company-name">
+        {{ brief.company_name }}
+        <span class="ticker-pill">{{ brief.ticker }}</span>
+        {% if selected_company and selected_company.sector %}
+        <span class="category-pill">{{ selected_company.sector }}</span>
+        {% endif %}
+      </div>
+      <div class="research-company-meta">
+        <span>Generated {{ brief.generated_at[:10] }} {{ brief.generated_at[11:16] }} UTC</span>
+        <span>&middot;</span>
+        <span>NSE/BSE</span>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      {% if brief.source_mode.value == "demo" %}
+      <span class="badge badge-amber">SYNTHETIC DEMO</span>
+      {% else %}
+      <span class="badge badge-green">VERIFIED SOURCE</span>
+      {% endif %}
+      <button type="button" class="btn-secondary" style="padding:5px 12px;font-size:12px;"
+              onclick="refreshBrief('{{ brief.ticker }}')">↺ Refresh</button>
+    </div>
+  </div>
+
+  <div class="coverage-stats-row">
+    <div class="coverage-metric">
+      <span class="coverage-label">Documents found</span>
+      <span class="coverage-val">{{ brief.coverage.documents_found }}</span>
+    </div>
+    <div class="coverage-metric">
+      <span class="coverage-label">Periods covered</span>
+      <span class="coverage-val">{{ brief.coverage.periods | join(', ') or 'N/A' }}</span>
+    </div>
+    <div class="coverage-metric">
+      <span class="coverage-label">Citations</span>
+      <span class="coverage-val">{{ brief.evidence | length }}</span>
+    </div>
+    <div class="coverage-metric">
+      <span class="coverage-label">Sections</span>
+      <span class="coverage-val">{{ brief.sections | length }}</span>
+    </div>
+  </div>
+</div>
+
+{# ── Coverage warnings ────────────────────────────────────── #}
+{% if brief.coverage.warnings %}
+<details class="research-warning-box">
+  <summary>Coverage &amp; data limitations</summary>
+  <ul>{% for w in brief.coverage.warnings %}<li>{{ w }}</li>{% endfor %}</ul>
+</details>
+{% endif %}
+
+{# ── Research sections ─────────────────────────────────────── #}
+{% for section in brief.sections %}
+<div class="research-section-card" id="sec-{{ section.id }}">
+  <div class="research-sec-head">
+    <span class="research-sec-title">{{ section.title }}</span>
+    <span class="badge badge-muted">{{ section.claims | length }} claims</span>
+  </div>
+  <p class="research-sec-summary">{{ section.summary }}</p>
+
+  <div class="claims-list">
+    {% for claim in section.claims %}
+    <div class="claim-item">
+      <div class="claim-header">
+        <p class="claim-text">{{ claim.text }}</p>
+        <div style="display:flex;align-items:center;gap:5px;flex-shrink:0;">
+          {% if claim.claim_type %}
+          <span class="badge badge-muted" style="font-size:9px;">{{ claim.claim_type | replace('_',' ') }}</span>
+          {% endif %}
+          <span class="confidence-badge confidence-{{ claim.confidence.value }}">{{ claim.confidence.value }}</span>
+        </div>
+      </div>
+      <div class="claim-citations">
+        {% if claim.evidence_ids %}
+          <span style="font-size:11px;color:var(--text-muted);font-weight:500;">Sources:</span>
+          {% for ev_id in claim.evidence_ids %}
+          <button type="button" class="citation-chip" onclick="openEvidenceModal('{{ ev_id }}')" title="{{ ev_id }}">[{{ ev_id }}]</button>
+          {% endfor %}
+        {% else %}
+          <span style="font-size:11px;color:var(--red);font-weight:600;">[No primary citation]</span>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endfor %}
+
+{# ── Evidence drawer ───────────────────────────────────────── #}
+<div class="evidence-inspector" id="evidence-inspector-section">
+  <div class="evidence-inspector-title">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+      <polyline points="14 2 14 8 20 8"/>
+    </svg>
+    Supporting Primary Source Evidence ({{ brief.evidence | length }} passages)
+  </div>
+  <p class="monitor-note" style="margin-bottom:12px;">Every factual claim links to a passage below. Third-party summaries and broker notes are excluded.</p>
+
+  <div class="evidence-grid">
+    {% for ev in brief.evidence %}
+    <div class="evidence-card" id="{{ ev.id }}"
+         data-id="{{ ev.id }}"
+         data-title="{{ ev.title }}"
+         data-publisher="{{ ev.publisher }}"
+         data-url="{{ ev.url if ev.has_verified_filing else '' }}"
+         data-period="{{ ev.period or 'Unspecified' }}"
+         data-section="{{ ev.page_or_section or 'N/A' }}"
+         data-verified="{{ 'true' if ev.has_verified_filing else 'false' }}"
+         data-is-fixture="{{ 'true' if ev.is_fixture else 'false' }}"
+         data-status="{{ 'Synthetic fixture' if ev.is_fixture else ('Verified official' if ev.has_verified_filing else 'Unverified') }}"
+         data-provenance="{{ 'DEMO FIXTURE' if ev.is_fixture else ('VERIFIED OFFICIAL' if ev.has_verified_filing else 'UNVERIFIED') }}">
+      <div class="evidence-card-header">
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          <span class="citation-chip" style="cursor:default;">{{ ev.id }}</span>
+          {% if ev.is_fixture %}
+          <span class="badge badge-amber">[DEMO FIXTURE]</span>
+          {% elif ev.has_verified_filing %}
+          <span class="badge badge-green">[OFFICIAL FILING]</span>
+          <span class="badge badge-blue" style="font-size:9px;">Status: Genuine Document</span>
+          {% else %}
+          <span class="badge badge-muted">[UNVERIFIED SOURCE]</span>
+          {% endif %}
+        </div>
+        <button type="button" class="btn-secondary" style="padding:3px 9px;font-size:11px;"
+                onclick="openEvidenceModal('{{ ev.id }}')">Inspect ↗</button>
+      </div>
+      <p style="font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:4px;">{{ ev.title }}</p>
+      <div class="evidence-source-tag" style="margin-bottom:6px;">
+        {{ ev.publisher }} · {{ ev.document_type }}
+        {% if ev.period %} · {{ ev.period }}{% endif %}
+        {% if ev.page_or_section %} · {{ ev.page_or_section }}{% endif %}
+      </div>
+      <blockquote class="evidence-quote">{{ ev.excerpt }}</blockquote>
+      {% if ev.has_verified_filing %}
+      <a href="{{ ev.url }}" target="_blank" rel="noopener noreferrer" class="evidence-link">View Official Primary Document Source ↗</a>
+      {% elif ev.is_fixture %}
+      <span style="font-size:11px;color:var(--text-muted);font-style:italic;">[Synthetic demo excerpt — offline fixture]</span>
+      {% else %}
+      <span style="font-size:11px;color:var(--text-muted);">Filing unverified — link unavailable.</span>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+{% else %}
+<div class="empty-state" style="margin-top:24px;">
+  <div class="empty-title">No research brief for {{ selected_ticker }}</div>
+  <div class="empty-desc">Select a company above to load an evidence-grounded brief.</div>
+</div>
+{% endif %}
+
+{# ── Evidence inspector modal ─────────────────────────────── #}
+<div id="inspectorModalBackdrop" class="inspector-modal-backdrop" onclick="closeEvidenceModal(event)">
+  <div class="inspector-modal" onclick="event.stopPropagation()">
+    <div class="inspector-modal-header">
+      <div>
+        <div style="font-size:11px;color:var(--blue);font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Primary Evidence Inspector</div>
+        <div id="modalId" style="font-size:16px;font-weight:800;font-family:var(--mono);color:var(--text-primary);"></div>
+      </div>
+      <button type="button" class="inspector-modal-close" onclick="closeEvidenceModal()">&times;</button>
+    </div>
+    <div class="inspector-field">
+      <div class="inspector-field-label">Document title</div>
+      <div id="modalTitle" class="inspector-field-value" style="font-weight:600;"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+      <div class="inspector-field">
+        <div class="inspector-field-label">Publisher</div>
+        <div id="modalPublisher" class="inspector-field-value"></div>
+      </div>
+      <div class="inspector-field">
+        <div class="inspector-field-label">Period</div>
+        <div id="modalPeriod" class="inspector-field-value"></div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+      <div class="inspector-field">
+        <div class="inspector-field-label">Page / section</div>
+        <div id="modalSection" class="inspector-field-value"></div>
+      </div>
+      <div class="inspector-field">
+        <div class="inspector-field-label">Provenance</div>
+        <div id="modalProvenance" class="inspector-field-value"></div>
+      </div>
+    </div>
+    <div class="inspector-field">
+      <div class="inspector-field-label">Excerpt</div>
+      <blockquote id="modalExcerpt" class="evidence-quote" style="margin-top:4px;font-size:13px;line-height:1.6;color:var(--text-primary);font-style:normal;"></blockquote>
+    </div>
+    <div class="inspector-field" style="margin-top:12px;border-top:1px solid var(--border);padding-top:10px;">
+      <div id="modalUrlLabel" class="inspector-field-label">Source link</div>
+      <a id="modalUrl" href="#" target="_blank" rel="noopener noreferrer" class="evidence-link"></a>
+      <span id="modalUrlPlaceholder" style="display:none;font-size:12px;color:var(--text-muted);font-style:italic;"></span>
+    </div>
+  </div>
+</div>
+
+<script>
+// Ticker search nav
+const searchInput = document.getElementById('ticker-search-input');
+if (searchInput) {
+  searchInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      const v = this.value.trim().toUpperCase();
+      if (v) window.location.href = '/research?ticker=' + encodeURIComponent(v);
+    }
+  });
+}
+
+function highlightEvidence(evId) {
+  const card = document.getElementById(evId);
+  if (!card) return;
+  document.querySelectorAll('.evidence-card').forEach(el => el.classList.remove('flash-highlight'));
+  card.classList.add('flash-highlight');
+  card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  setTimeout(() => card.classList.remove('flash-highlight'), 3000);
+}
+
+function openEvidenceModal(evId) {
+  highlightEvidence(evId);
+  const card = document.getElementById(evId);
+  const backdrop = document.getElementById('inspectorModalBackdrop');
+  const urlLink = document.getElementById('modalUrl');
+  const urlPlaceholder = document.getElementById('modalUrlPlaceholder');
+  const urlLabel = document.getElementById('modalUrlLabel');
+
+  if (!card) {
+    document.getElementById('modalId').textContent = evId;
+    document.getElementById('modalTitle').textContent = 'Unresolved Citation Error';
+    document.getElementById('modalPublisher').textContent = 'Unknown';
+    document.getElementById('modalPeriod').textContent = 'N/A';
+    document.getElementById('modalSection').textContent = 'N/A';
+    document.getElementById('modalProvenance').textContent = 'ERROR: Citation ID Not Found in Evidence Store';
+    document.getElementById('modalExcerpt').textContent = 'Citation [' + evId + '] not found.';
+    if (urlLink) urlLink.style.display = 'none';
+    if (urlPlaceholder) { urlPlaceholder.textContent = 'Citation unresolved'; urlPlaceholder.style.display = 'inline'; }
+    if (backdrop) backdrop.classList.add('active');
+    return;
+  }
+
+  document.getElementById('modalId').textContent = evId;
+  document.getElementById('modalTitle').textContent = card.dataset.title || '';
+  document.getElementById('modalPublisher').textContent = card.dataset.publisher || '';
+  document.getElementById('modalPeriod').textContent = card.dataset.period || 'N/A';
+  document.getElementById('modalSection').textContent = card.dataset.section || 'N/A';
+  document.getElementById('modalProvenance').textContent = (card.dataset.provenance || '') + ' · ' + (card.dataset.status || '');
+  const quote = card.querySelector('.evidence-quote');
+  document.getElementById('modalExcerpt').textContent = quote ? quote.textContent.trim() : '';
+
+  const rawUrl = card.dataset.url || '';
+  const isValid = rawUrl && (rawUrl.startsWith('https://') || rawUrl.startsWith('http://'));
+  const isFixture = card.dataset.isFixture === 'true';
+  const isVerified = card.dataset.verified === 'true';
+
+  if (isValid && !isFixture && isVerified) {
+    urlLink.href = rawUrl;
+    urlLink.textContent = rawUrl + ' ↗';
+    urlLink.style.display = 'inline-flex';
+    if (urlPlaceholder) urlPlaceholder.style.display = 'none';
+    if (urlLabel) urlLabel.textContent = 'Official primary source:';
+  } else {
+    if (urlLink) urlLink.style.display = 'none';
+    if (urlPlaceholder) {
+      urlPlaceholder.textContent = isFixture ? '[Synthetic fixture — no live link]' : 'No verified link available.';
+      urlPlaceholder.style.display = 'inline';
+    }
+    if (urlLabel) urlLabel.textContent = 'Document source:';
+  }
+  if (backdrop) backdrop.classList.add('active');
+}
+
+function closeEvidenceModal(event) {
+  const backdrop = document.getElementById('inspectorModalBackdrop');
+  if (backdrop) backdrop.classList.remove('active');
+}
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeEvidenceModal();
+});
+
+function refreshBrief(ticker) {
+  const loading = document.getElementById('research-loading');
+  if (loading) loading.style.display = 'flex';
+  fetch('/api/research/' + ticker + '?force_refresh=true', { method: 'POST' })
+    .then(r => r.json())
+    .then(() => window.location.reload())
+    .catch(err => {
+      if (loading) loading.style.display = 'none';
+      alert('Error refreshing: ' + err);
+    });
+}
+</script>
+{% endblock %}

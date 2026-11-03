@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+# Never commit environment files
+.env  
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Distribution
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Testing / Coverage
+htmlcov/
+.coverage
+.coverage.*
+.pytest_cache/
+.pytest_cache
+mypy_cache/
+
+# Logs
+*.log
+logs/
+
+# Environment
+.env.local
+# Local monitoring preferences and acknowledgements
+runtime/
+# Development screenshots and reports
+artifacts/

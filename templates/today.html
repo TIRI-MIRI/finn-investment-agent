@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% from "monitoring_macros.html" import feed_event, signal_row with context %}
+{% block title %}FINN — Today's Digest{% endblock %}
+{% block content %}
+<header class="page-header">
+<p class="page-kicker">Today&#39;s Digest · Data as of {{ data_as_of or 'unavailable' }}</p>
+<h1 class="page-title"><span id="chip-unread">{{ needs_count }}</span> need you</h1>
+<p class="page-subtitle">{{ medium_priority_count }} worth a glance · {{ low_priority_count }} routine filed away</p>
+{% if demo_mode %}<p class="monitor-note">Demo Fixture Environment: synthetic announcements, results &amp; prices</p>{% endif %}
+</header>
+<div class="daily-brief"><span class="pulse-label">Daily brief</span><p>{{ daily_brief }}</p></div>
+<nav class="window-filters" aria-label="Digest time window">
+{% for key,label in [('24h','24h'),('3d','3d'),('7d','7d'),('30d','30d'),('all','All')] %}
+<a href="/today?window={{ key }}{% if custom_reference %}&amp;ref_date={{ reference_date }}{% endif %}" class="window-btn{% if active_window == key %} active{% endif %}" {% if active_window == key %}aria-current="page"{% endif %}>{{ label }}</a>
+{% endfor %}</nav>
+{% if holding_tiles %}<div class="holdings-strip" aria-label="Holdings overview">
+{% for tile in holding_tiles %}<div class="holding-tile"><span class="holding-ticker">{{ tile.ticker }}</span><span class="holding-change {{ 'pos' if tile.change > 0 else 'neg' if tile.change < 0 else 'flat' }}">{{ '%+.1f'|format(tile.change) }}%</span><svg viewBox="0 0 100 24" role="img" aria-label="{{ tile.ticker }} closing price history"><polyline points="{{ tile.points }}" fill="none" stroke="currentColor" stroke-width="1.5" /></svg>{% if tile.volume %}<span class="holding-vol-flag">Volume ↑</span>{% endif %}</div>{% endfor %}
+</div>{% endif %}
+{% if monitor.warning %}<p role="alert" class="monitor-error">{{ monitor.warning }}</p>{% endif %}
+<p id="monitor-status" role="status" aria-live="polite"></p>
+{% if not monitor.queue %}<p class="monitor-note">No rules triggered — filings remain available below.</p>{% endif %}
+<div class="section-head"><h2 class="section-title">Needs You</h2><span class="section-badge">High Priority · {{ high_priority_count }}</span></div>
+<div class="card-stack">{% for ann in material_announcements if ann.priority.value == 'high' %}{{ feed_event(ann, monitor) }}{% else %}<p class="monitor-note">No high-priority filings in this window.</p>{% endfor %}</div>
+<div class="section-head"><h2 class="section-title">Worth a Glance</h2><span class="section-badge">Medium Priority · {{ medium_priority_count }}</span></div>
+<div class="card-stack">{% for ann in material_announcements if ann.priority.value == 'medium' %}{{ feed_event(ann, monitor, true) }}{% else %}<p class="monitor-note">Nothing else to review.</p>{% endfor %}</div>
+<details class="routine-details"><summary>Filed away · {{ low_priority_count }} Routine Filings · tap to show</summary><p class="monitor-note">Routine &amp; Compliance Filings</p><div class="card-stack">{% for ann in routine_announcements %}{{ feed_event(ann, monitor, true) }}{% endfor %}</div></details>
+<details class="digest-details"><summary>Corporate Events &amp; Filings · Portfolio Universe {{ portfolio_count }}</summary><p class="monitor-note">{{ high_priority_count }} High Priority · {{ medium_priority_count }} Medium Priority · {{ low_priority_count }} Routine Filings</p><p class="monitor-note">Triggered Alerts: {{ monitor.queue|length }} · <a href="/alerts?window={{ active_window }}">Open Alerts ↗</a></p>
+<h2 class="section-title">Price &amp; Volume Anomalies</h2><p class="monitor-note">Market threshold observations only; no causal relationship established.</p>
+<div class="table-scroll"><table class="signal-table"><thead><tr><th>Ticker</th><th>Daily move</th><th>Volume</th><th>Baseline</th><th>Thresholds</th><th>EOD date</th><th>Alert</th></tr></thead><tbody>{% for signal in monitor.signals if signal.triggered %}{{ signal_row(signal, monitor) }}{% else %}<tr><td colspan="7">No market thresholds crossed.</td></tr>{% endfor %}</tbody></table></div>
+{% for alert in monitor.queue if alert.signal %}<div id="{{ alert.id }}"><a href="/alerts?window={{ active_window }}#{{ alert.id }}">{{ alert.ticker }} · {{ alert.reason }}</a></div>{% endfor %}
+</details>
+{% endblock %}
+{% block scripts %}<script src="/static/js/monitoring.js" defer></script>{% endblock %}

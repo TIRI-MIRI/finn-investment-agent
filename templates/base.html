@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+  <title>{% block title %}FINN — Investment Intelligence{% endblock %}</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="stylesheet" href="/static/css/watch.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect width='24' height='24' rx='6' fill='%2365D6CA'/><text x='50%' y='68%' font-size='14' font-weight='bold' fill='%23101B2C' text-anchor='middle'>F</text></svg>">
+</head>
+<body class="finn-workspace">
+
+  <!-- Top Sticky Header -->
+  <header class="top-header" role="banner">
+    <div class="header-container">
+      <a href="/today" class="brand-wrap" aria-label="FINN Home">
+        <span class="brand-logo" aria-hidden="true">F</span>
+        <div>
+          <div class="brand-title">FINN</div>
+          <div class="brand-sub">ENAM AI Challenge</div>
+        </div>
+      </a>
+
+      <nav class="desktop-nav" aria-label="Primary navigation">
+        <a href="/today"    class="nav-link-desktop {% if current_tab == 'today'    %}active{% endif %}">Today</a>
+        <a href="/alerts"   class="nav-link-desktop {% if current_tab == 'alerts'   %}active{% endif %}">Alerts</a>
+        <a href="/research" class="nav-link-desktop {% if current_tab == 'research' %}active{% endif %}">Research</a>
+        <a href="/watch"    class="nav-link-desktop {% if current_tab == 'watch'    %}active{% endif %}">Watch</a>
+        <a href="/portfolio" style="display:none;" class="nav-link-desktop {% if current_tab == 'portfolio' %}active{% endif %}">Portfolio</a>
+        <a href="/settings"  style="display:none;" class="nav-link-desktop {% if current_tab == 'settings'  %}active{% endif %}">Settings</a>
+      </nav>
+
+      <div class="header-right">
+        <div class="demo-pill">
+          <span class="demo-dot" aria-hidden="true"></span>
+          <span>{{ "Synthetic demo data" if app_settings.demo_mode else "Verified filings" }}</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="main-content" role="main">
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- Mobile Bottom Navigation -->
+  <nav class="bottom-nav" role="navigation" aria-label="Mobile navigation">
+    <a href="/today"    class="nav-item-mobile {% if current_tab == 'today'    %}active{% endif %}" aria-label="Today">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+      <span>Today</span>
+    </a>
+    <a href="/alerts"   class="nav-item-mobile {% if current_tab == 'alerts'   %}active{% endif %}" aria-label="Alerts">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+      <span>Alerts</span>
+    </a>
+    <a href="/research" class="nav-item-mobile {% if current_tab == 'research' %}active{% endif %}" aria-label="Research">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+      <span>Research</span>
+    </a>
+    <a href="/watch"    class="nav-item-mobile {% if current_tab == 'watch'    %}active{% endif %}" aria-label="Watch">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>
+      <span>Watch</span>
+    </a>
+  </nav>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>
